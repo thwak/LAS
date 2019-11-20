@@ -4,6 +4,8 @@ import tree.TreeNode;
 
 public class Move extends EditOp {
 
+	private static final long serialVersionUID = -3997326798965276871L;
+
 	public Move(TreeNode node, TreeNode location, int position) {
 		super(node, location, position);
 	}

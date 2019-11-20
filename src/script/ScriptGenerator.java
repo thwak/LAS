@@ -23,6 +23,8 @@ public class ScriptGenerator {
 	private static final int DEPTH_THRESHOLD = System.getProperty("las.depth.threshold") == null ? 3 : Integer.parseInt(System.getProperty("las.depth.threshold"));
 	private static final double SIM_THRESHOLD = System.getProperty("las.sim.threshold") == null ? 0.65d : Double.parseDouble(System.getProperty("las.sim.threshold"));
 	private static final boolean ENABLE_EXACT_MATCH =  System.getProperty("las.enable.exact") == null ? true : Boolean.parseBoolean(System.getProperty("las.enable.exact"));
+	private static final boolean ENABLE_MOVE =  System.getProperty("las.enable.move") == null ? true : Boolean.parseBoolean(System.getProperty("las.enable.move"));
+	private static final boolean ENABLE_REPLACE =  System.getProperty("las.enable.replace") == null ? false : Boolean.parseBoolean(System.getProperty("las.enable.replace"));
 
 	public static int exactMatch = 0;
 	public static int similarMatch = 0;
@@ -47,7 +49,7 @@ public class ScriptGenerator {
 			Tree before, Tree after) {
 		EditScript script = new EditScript();
 		//Generate delete first.
-		Stack<EditOp> opStack = new Stack<EditOp>();
+		Stack<EditOp> opStack = new Stack<>();
 		for(TreeNode node : before.getRoot().children){
 			script.addEditOps(generateDelete(node, opStack));
 		}
@@ -64,15 +66,23 @@ public class ScriptGenerator {
 		return script;
 	}
 
-	private static List<Move> generateOrderingChange(TreeNode node) {
-		List<Move> editOps = new ArrayList<>();
+	private static List<EditOp> generateOrderingChange(TreeNode node) {
+		List<EditOp> editOps = new ArrayList<>();
 		//node must be from the old tree.
 		if(node.isMatched()){
 			List<TreeNode> oldNodes = node.children;
 			List<TreeNode> newNodes = node.getMatched().children;
 			for(TreeNode n : findNonLCSNodes(oldNodes, newNodes)){
-				Move move = new Move(n, n.getMatched().getParent(), n.getMatched().indexInParent());
-				editOps.add(move);
+				if(ENABLE_MOVE) {
+					Move move = new Move(n, n.getMatched().getParent(), n.getMatched().indexInParent());
+					editOps.add(move);
+				} else {
+					//Split move into a delete-insert pair
+					Delete del = new Delete(n);
+					Insert ins = new Insert(n.getMatched());
+					editOps.add(del);
+					editOps.add(ins);
+				}
 			}
 		}
 		for(TreeNode child : node.children){
@@ -82,7 +92,7 @@ public class ScriptGenerator {
 	}
 
 	private static List<TreeNode> findNonLCSNodes(List<TreeNode> oldNodes, List<TreeNode> newNodes) {
-		List<TreeNode> nonLCSNodes = new ArrayList<TreeNode>();
+		List<TreeNode> nonLCSNodes = new ArrayList<>();
 		int m = oldNodes.size();
 		int n = newNodes.size();
 		if(m == 0 || n == 0){
@@ -133,23 +143,22 @@ public class ScriptGenerator {
 	 */
 	private static List<? extends EditOp> generateInsertMoveUpdate(TreeNode node,
 			Stack<EditOp> opStack) {
-		List<EditOp> editOps = new ArrayList<EditOp>();
+		List<EditOp> editOps = new ArrayList<>();
 		boolean isPushed = false;
 		if(node.isMatched()){
-			TreeNode parent = node.getParent();
-			TreeNode parentOfMatched = node.getMatched().getParent();
-			if(parent != null
-					&& parent.getMatched() != parentOfMatched){
-				node.setChangeType(TreeNode.NODE_INSERTED);
-				node.getMatched().setChangeType(TreeNode.NODE_DELETED);
-				Move move = new Move(node.getMatched(), parent, node.indexInParent());
-				//A subtree can be moved to an inserted node, so need to check op type.
-				if(!opStack.isEmpty() && opStack.peek() instanceof Move){
-					opStack.peek().addEditOp(move);
-				}else{
-					editOps.add(move);
+			if(node.isInserted()) {
+				if(ENABLE_MOVE) {
+					Move move = new Move(node.getMatched(), node.getParent(), node.indexInParent());
+					//If a subtree is moved to an inserted node, so need to check op type.
+					if(!opStack.isEmpty() && opStack.peek() instanceof Move){
+						opStack.peek().addEditOp(move);
+					}else{
+						editOps.add(move);
+					}
+					opStack.push(move);
+				} else {
+					addInsert(node, opStack, editOps);
 				}
-				opStack.push(move);
 				isPushed = true;
 			}
 			if(!node.getLabel().equals(node.getMatched().getLabel())){
@@ -157,13 +166,7 @@ public class ScriptGenerator {
 			}
 		}else{
 			node.setChangeType(TreeNode.NODE_INSERTED);
-			Insert insert = new Insert(node);
-			if(!opStack.isEmpty() && opStack.peek() instanceof Insert){
-				opStack.peek().addEditOp(insert);
-			}else{
-				editOps.add(insert);
-			}
-			opStack.push(insert);
+			addInsert(node, opStack, editOps);
 			isPushed = true;
 		}
 		for(TreeNode child : node.children){
@@ -174,6 +177,16 @@ public class ScriptGenerator {
 		return editOps;
 	}
 
+	private static void addInsert(TreeNode node, Stack<EditOp> opStack, List<EditOp> editOps) {
+		Insert insert = new Insert(node);
+		if(!opStack.isEmpty() && opStack.peek() instanceof Insert){
+			opStack.peek().addEditOp(insert);
+		}else{
+			editOps.add(insert);
+		}
+		opStack.push(insert);
+	}
+
 	/**
 	 * Generate delete operations for each deleted subtree.
 	 *
@@ -182,17 +195,19 @@ public class ScriptGenerator {
 	 * @return a list of delete operations.
 	 */
 	private static List<? extends EditOp> generateDelete(TreeNode node, Stack<EditOp> opStack) {
-		List<EditOp> delOps = new ArrayList<EditOp>();
+		List<EditOp> delOps = new ArrayList<>();
 		if(!node.isMatched()){
 			node.setChangeType(TreeNode.NODE_DELETED);
-			Delete delete = new Delete(node);
-			//If opStack is empty, it is the root of a deleted subtree.
-			if(opStack.empty()){
-				delOps.add(delete);
-			}else{
-				opStack.peek().addEditOp(delete);
+			addDeleted(node, opStack, delOps);
+		}else if(!ENABLE_MOVE){
+			//Need to add deleted if move is not enabled.
+			TreeNode parent = node.getParent();
+			TreeNode parentOfMatched = node.getMatched().getParent();
+			if(parent != null
+					&& parent.getMatched() != parentOfMatched){
+				node.getMatched().setChangeType(TreeNode.NODE_INSERTED);
+				addDeleted(node, opStack, delOps);
 			}
-			opStack.push(delete);
 		}
 		for(TreeNode child : node.children){
 			delOps.addAll(generateDelete(child, opStack));
@@ -200,6 +215,17 @@ public class ScriptGenerator {
 		if(!node.isMatched())
 			opStack.pop();
 		return delOps;
+	}
+
+	private static void addDeleted(TreeNode node, Stack<EditOp> opStack, List<EditOp> delOps) {
+		Delete delete = new Delete(node);
+		//If opStack is empty, it is the root of a deleted subtree.
+		if(opStack.empty()){
+			delOps.add(delete);
+		}else{
+			opStack.peek().addEditOp(delete);
+		}
+		opStack.push(delete);
 	}
 
 	/**
@@ -337,7 +363,7 @@ public class ScriptGenerator {
 	}
 
 	private static double leafSimilarity(TreeNode node, TreeNode candidate) {
-		Map<String, Integer> leafCount = new HashMap<String, Integer>();
+		Map<String, Integer> leafCount = new HashMap<>();
 		double numOfLeaves = 0.0d;
 		int notMatchedLeaves = 0;
 		for(TreeNode child : node.children){
@@ -407,8 +433,8 @@ public class ScriptGenerator {
 		}
 
 		//Match children of unmatched nodes;
-		List<TreeNode> xChildren = new ArrayList<TreeNode>();
-		List<TreeNode> yChildren = new ArrayList<TreeNode>();
+		List<TreeNode> xChildren = new ArrayList<>();
+		List<TreeNode> yChildren = new ArrayList<>();
 		for(TreeNode node : xNodes){
 			if(!node.isMatched())
 				xChildren.addAll(node.children);
@@ -458,7 +484,7 @@ public class ScriptGenerator {
 		List<TreeNode> bfs = before.bfs();
 		for(TreeNode node : bfs){
 			if (node.isMatched() && !node.isLeaf()) {
-				List<TreeNode> unmatchedLeaves = new ArrayList<TreeNode>();
+				List<TreeNode> unmatchedLeaves = new ArrayList<>();
 				//Get unmatched leaves.
 				for (TreeNode child : node.getUnmatchedChildren()) {
 					if (child.isLeaf()) {
@@ -467,7 +493,7 @@ public class ScriptGenerator {
 				}
 				//Find exact match first.
 				List<TreeNode> candidates = node.getMatched().getUnmatchedChildren();
-				List<TreeNode> matched = new ArrayList<TreeNode>();
+				List<TreeNode> matched = new ArrayList<>();
 				for(TreeNode leaf : unmatchedLeaves){
 					for (TreeNode candidate : candidates) {
 						if (!candidate.isMatched() &&
@@ -532,8 +558,8 @@ public class ScriptGenerator {
 		}
 
 		//Match children of unmatched nodes;
-		List<TreeNode> xChildren = new ArrayList<TreeNode>();
-		List<TreeNode> yChildren = new ArrayList<TreeNode>();
+		List<TreeNode> xChildren = new ArrayList<>();
+		List<TreeNode> yChildren = new ArrayList<>();
 		for(TreeNode x : xNodes){
 			if(!x.isMatched()){
 				xChildren.addAll(x.children);
@@ -580,7 +606,7 @@ public class ScriptGenerator {
 	 * @return a list of candidate nodes.
 	 */
 	private static List<TreeNode> findCandidates(TreeNode x, TreeNode y){
-		List<TreeNode> candidates = new ArrayList<TreeNode>();
+		List<TreeNode> candidates = new ArrayList<>();
 		//y and adjacent nodes in the same depth.
 		List<TreeNode> siblings = getSiblings(y);
 		siblings.add(0, y);
@@ -599,7 +625,7 @@ public class ScriptGenerator {
 		//y and sibling's descendants,
 		int depth = 1;
 		while (depth <= DEPTH_THRESHOLD) {
-			List<TreeNode> descendants = new ArrayList<TreeNode>();
+			List<TreeNode> descendants = new ArrayList<>();
 			for (TreeNode sibling : siblings) {
 				descendants.addAll(sibling.children);
 			}
@@ -633,7 +659,7 @@ public class ScriptGenerator {
 	}
 
 	private static List<TreeNode> getSiblings(TreeNode node) {
-		List<TreeNode> siblings = new ArrayList<TreeNode>();
+		List<TreeNode> siblings = new ArrayList<>();
 		if(node.getParent() != null){
 			List<TreeNode> nodes = node.getParent().children;
 			int index = nodes.indexOf(node);

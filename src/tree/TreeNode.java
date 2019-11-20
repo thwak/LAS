@@ -42,7 +42,7 @@ public class TreeNode implements Serializable {
 		this.vector = new TreeVector(label);
 		this.matched = null;
 		this.parent = null;
-		this.children = new ArrayList<TreeNode>();
+		this.children = new ArrayList<>();
 		this.lineNumber = computeLineNumber();
 		this.offset = 0;
 		this.candidates = new Candidates();
@@ -167,7 +167,7 @@ public class TreeNode implements Serializable {
 	}
 
 	public List<TreeNode> getUnmatchedChildren() {
-		List<TreeNode> unmatched = new ArrayList<TreeNode>();
+		List<TreeNode> unmatched = new ArrayList<>();
 		for(TreeNode child : children){
 			if(!child.isMatched())
 				unmatched.add(child);
