@@ -15,7 +15,7 @@ public class EditScript implements Serializable {
 	public int exactMatchCount = 0;
 
 	public EditScript(){
-		this.operations = new ArrayList<EditOp>();
+		this.operations = new ArrayList<>();
 	}
 
 	public boolean addEditOp(EditOp op){
@@ -62,5 +62,9 @@ public class EditScript implements Serializable {
 		this.followupMatch = followupMatch;
 		this.leafMatch = leafMatch;
 		this.exactMatchCount = exactMatchCount;
+	}
+
+	public void removeEditOp(EditOp op) {
+		this.operations.remove(op);
 	}
 }

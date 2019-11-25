@@ -2,17 +2,20 @@ package script;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Stack;
 
 import org.eclipse.jdt.core.dom.ASTNode;
+import org.eclipse.jdt.core.dom.StructuralPropertyDescriptor;
 
 import script.model.Delete;
 import script.model.EditOp;
 import script.model.EditScript;
 import script.model.Insert;
 import script.model.Move;
+import script.model.Replace;
 import script.model.Update;
 import tree.Tree;
 import tree.TreeNode;
@@ -23,8 +26,7 @@ public class ScriptGenerator {
 	private static final int DEPTH_THRESHOLD = System.getProperty("las.depth.threshold") == null ? 3 : Integer.parseInt(System.getProperty("las.depth.threshold"));
 	private static final double SIM_THRESHOLD = System.getProperty("las.sim.threshold") == null ? 0.65d : Double.parseDouble(System.getProperty("las.sim.threshold"));
 	private static final boolean ENABLE_EXACT_MATCH =  System.getProperty("las.enable.exact") == null ? true : Boolean.parseBoolean(System.getProperty("las.enable.exact"));
-	private static final boolean ENABLE_MOVE =  System.getProperty("las.enable.move") == null ? true : Boolean.parseBoolean(System.getProperty("las.enable.move"));
-	private static final boolean ENABLE_REPLACE =  System.getProperty("las.enable.replace") == null ? false : Boolean.parseBoolean(System.getProperty("las.enable.replace"));
+	private static final boolean ENABLE_REPLACE =  System.getProperty("las.enable.replace") == null ? true : Boolean.parseBoolean(System.getProperty("las.enable.replace"));
 
 	public static int exactMatch = 0;
 	public static int similarMatch = 0;
@@ -54,16 +56,238 @@ public class ScriptGenerator {
 			script.addEditOps(generateDelete(node, opStack));
 		}
 
-		//Then generate insert, move, update.
+		//Then generate insert, update.
 		opStack.clear();
 		for(TreeNode node : after.getRoot().children){
 			script.addEditOps(generateInsertMoveUpdate(node, opStack));
 		}
 
+		//If ENABLE_REPLACE is on, convert insert-delete pairs into Replace.
+		if(ENABLE_REPLACE)
+			generateReplace(script);
+
 		//Finally, generate move operations for ordering changes.
 		script.addEditOps(generateOrderingChange(before.getRoot()));
 
 		return script;
+	}
+
+	private static void generateReplace(EditScript script) {
+		Map<EditOp, EditOp> pairs = new HashMap<>();
+		List<Insert> inserts = new ArrayList<>();
+		List<Delete> deletes = new ArrayList<>();
+		List<Move> moves = new ArrayList<>();
+		List<Update> updates = new ArrayList<>();
+		for(EditOp op : script.getEditOps()) {
+			if(op instanceof Insert) {
+				inserts.add((Insert)op);
+			} else if(op instanceof Delete) {
+				deletes.add((Delete)op);
+			} else if(op instanceof Move) {
+				moves.add((Move)op);
+			} else if(op instanceof Update) {
+				updates.add((Update)op);
+			}
+		}
+
+		//Find replace candidates connected by Moves.
+		for(Move mov : moves) {
+			Delete del = findEditOp(mov.getNode(), deletes);
+			Insert ins = findEditOp(mov.getNode().getMatched(), inserts);
+			if(del != null && ins != null) {
+				if(!pairs.containsKey(del) && !pairs.containsKey(ins)
+						&& verifyLoc(del.getNode(), ins.getNode(), false)) {
+					pairs.put(del, ins);
+					pairs.put(ins, del);
+				}
+				pairs.put(mov, del);
+			} else if(del != null) {
+				if(!pairs.containsKey(del)
+						&& verifyLoc(del.getNode(), mov.getNode().getMatched(), false)) {
+					pairs.put(del, mov);
+				} else {
+					pairs.put(mov, del);
+				}
+			} else if(ins != null) {
+				if(!pairs.containsKey(ins)
+						&& verifyLoc(ins.getNode(), mov.getNode(), false)) {
+					pairs.put(ins, mov);
+				} else {
+					pairs.put(mov, ins);
+				}
+			}
+		}
+
+		//Processing replace candidates.
+		for(EditOp op : pairs.keySet()) {
+			EditOp op2 = pairs.get(op);
+			script.removeEditOp(op);
+			if(op instanceof Delete) {
+				Delete del = (Delete)op;
+				deletes.remove(del);
+				script.removeEditOp(op2);
+				if(op2 instanceof Insert) {
+					Replace r = new Replace(del.getNode(), op2.getNode());
+					discardUpdates(del, updates, script);
+					script.addEditOp(r);
+				} else if(op2 instanceof Move) {
+					Replace r = new Replace(del.getNode(), op2.getNode().getMatched());
+					discardUpdates(del, updates, script);
+					script.addEditOp(r);
+				}
+			} else if(op instanceof Insert) {
+				inserts.remove(op);
+				script.removeEditOp(op2);
+				if(op2 instanceof Move) {
+					Replace r = new Replace(op2.getNode(), op.getNode());
+					discardUpdates(op, updates, script);
+					script.addEditOp(r);
+				}
+			} else if(op instanceof Move) {
+				discardMove((Move)op, pairs, script);
+				discardUpdates(op, updates, script);
+			}
+		}
+
+		//Check remaining deletes and inserts.
+		for(Delete del : deletes) {
+			Iterator<Insert> it = inserts.iterator();
+			while(it.hasNext()) {
+				Insert ins = it.next();
+				if(verifyLoc(del.getNode(), ins.getNode(), true)) {
+					script.removeEditOp(del);
+					script.removeEditOp(ins);
+					it.remove();
+					Replace r = new Replace(del.getNode(), ins.getNode());
+					discardUpdates(del, updates, script);
+					script.addEditOp(r);
+					break;
+				}
+			}
+		}
+	}
+
+	private static void discardUpdates(EditOp op, List<Update> updates, EditScript script) {
+		Iterator<Update> it = updates.iterator();
+		while(it.hasNext()) {
+			Update upd = it.next();
+			TreeNode node = op instanceof Insert ? upd.getLocation() : upd.getNode();
+			if(descCheck(op.getNode(), node)) {
+				it.remove();
+				script.removeEditOp(upd);
+			}
+		}
+	}
+
+	private static boolean descCheck(TreeNode node, TreeNode descendant) {
+		TreeNode parent = descendant.getParent();
+		while(parent != null) {
+			if(node == parent) {
+				return true;
+			}
+			parent = parent.getParent();
+		}
+		return false;
+	}
+
+	private static void discardMove(Move mov, Map<EditOp, EditOp> pairs, EditScript script) {
+		EditOp op = pairs.get(mov);
+		//If op is combined to a replace.
+		if(pairs.containsKey(op)) {
+			if(op instanceof Delete) {
+				//if mov is a part of a delete, discard the deleted and add the inserted part.
+				script.addEditOp(new Insert(mov.getNode().getMatched()));
+				mov.getNode().getMatched().unmatch();
+				mov.getNode().unmatch();
+			} else if(op instanceof Insert) {
+				script.addEditOp(new Delete(mov.getNode()));
+				mov.getNode().getMatched().unmatch();
+				mov.getNode().unmatch();
+			}
+		}
+	}
+
+	private static boolean verifyLoc(TreeNode node1, TreeNode node2, boolean typeCheck) {
+		if(node1.getParent() == null || node2.getParent() == null
+				|| node1.getParent().getMatched() != node2.getParent())
+			return false;
+		StructuralPropertyDescriptor loc1 = identifyLocation(node1);
+		StructuralPropertyDescriptor loc2 = identifyLocation(node2);
+		if(loc1 != null && loc2 != null && loc1.equals(loc2)) {
+			if (typeCheck && loc1.getId().equals("statements")
+					&& node1.getType() != node2.getType()) {
+				return false;
+			}
+			if (loc1.isChildListProperty() && !loc1.getId().equals("statements")
+					&& node1.indexInParent() != node2.indexInParent()) {
+				return false;
+			}
+			if(loc1.getId().equals("statements")) {
+				int leftCount1 = getMatchedLeftCount(node1);
+				int leftCount2 = getMatchedLeftCount(node2);
+				TreeNode left1 = null;
+				TreeNode left2 = null;
+				if(leftCount1 >= leftCount2) {
+					left1 = getMatchedLeft(node1, leftCount1-leftCount2);
+					left2 = getMatchedLeft(node2, 0);
+				} else {
+					left1 = getMatchedLeft(node1, 0);
+					left2 = getMatchedLeft(node2, leftCount2-leftCount1);
+				}
+				if(left1 == null && left2 == null ||
+						left1 != null && left1.getMatched() == left2)
+					return true;
+				else
+					return false;
+			}
+			return true;
+		}
+		return false;
+	}
+
+	private static TreeNode getMatchedLeft(TreeNode node, int offset) {
+		TreeNode left = node.getLeft();
+		while(left != null && offset > 0) {
+			offset--;
+			left = left.getLeft();
+		}
+		return left;
+	}
+
+	private static int getMatchedLeftCount(TreeNode node) {
+		int count = 0;
+		TreeNode left = node.getLeft();
+		while(left != null) {
+			if(left.isMatched())
+				count++;
+			left = left.getLeft();
+		}
+		return count;
+	}
+
+	private static StructuralPropertyDescriptor identifyLocation(TreeNode node) {
+		StructuralPropertyDescriptor loc;
+		if(node.getASTNode().getParent().getNodeType() == ASTNode.EXPRESSION_STATEMENT)
+			loc = node.getASTNode().getParent().getLocationInParent();
+		else
+			loc = node.getASTNode().getLocationInParent();
+		return loc;
+	}
+
+	private static <T extends EditOp> T findEditOp(TreeNode node, List<T> operations) {
+		if(node.getParent().isMatched())
+			return null;
+		while(node.getParent() != null) {
+			if(!node.getParent().isMatched())
+				node = node.getParent();
+			else
+				break;
+		}
+		for(T op : operations) {
+			if(op.getNode().equals(node))
+				return op;
+		}
+		return null;
 	}
 
 	private static List<EditOp> generateOrderingChange(TreeNode node) {
@@ -73,16 +297,8 @@ public class ScriptGenerator {
 			List<TreeNode> oldNodes = node.children;
 			List<TreeNode> newNodes = node.getMatched().children;
 			for(TreeNode n : findNonLCSNodes(oldNodes, newNodes)){
-				if(ENABLE_MOVE) {
-					Move move = new Move(n, n.getMatched().getParent(), n.getMatched().indexInParent());
-					editOps.add(move);
-				} else {
-					//Split move into a delete-insert pair
-					Delete del = new Delete(n);
-					Insert ins = new Insert(n.getMatched());
-					editOps.add(del);
-					editOps.add(ins);
-				}
+				Move move = new Move(n, n.getMatched().getParent(), n.getMatched().indexInParent());
+				editOps.add(move);
 			}
 		}
 		for(TreeNode child : node.children){
@@ -146,19 +362,20 @@ public class ScriptGenerator {
 		List<EditOp> editOps = new ArrayList<>();
 		boolean isPushed = false;
 		if(node.isMatched()){
-			if(node.isInserted()) {
-				if(ENABLE_MOVE) {
-					Move move = new Move(node.getMatched(), node.getParent(), node.indexInParent());
-					//If a subtree is moved to an inserted node, so need to check op type.
-					if(!opStack.isEmpty() && opStack.peek() instanceof Move){
-						opStack.peek().addEditOp(move);
-					}else{
-						editOps.add(move);
-					}
-					opStack.push(move);
-				} else {
-					addInsert(node, opStack, editOps);
+			TreeNode parent = node.getParent();
+			TreeNode parentOfMatched = node.getMatched().getParent();
+			if(parent != null
+					&& parent.getMatched() != parentOfMatched){
+				node.setChangeType(TreeNode.NODE_INSERTED);
+				node.getMatched().setChangeType(TreeNode.NODE_DELETED);
+				Move move = new Move(node.getMatched(), node.getParent(), node.indexInParent());
+				//If a subtree is moved to an inserted node, so need to check op type.
+				if(!opStack.isEmpty() && opStack.peek() instanceof Move){
+					opStack.peek().addEditOp(move);
+				}else{
+					editOps.add(move);
 				}
+				opStack.push(move);
 				isPushed = true;
 			}
 			if(!node.getLabel().equals(node.getMatched().getLabel())){
@@ -199,15 +416,6 @@ public class ScriptGenerator {
 		if(!node.isMatched()){
 			node.setChangeType(TreeNode.NODE_DELETED);
 			addDeleted(node, opStack, delOps);
-		}else if(!ENABLE_MOVE){
-			//Need to add deleted if move is not enabled.
-			TreeNode parent = node.getParent();
-			TreeNode parentOfMatched = node.getMatched().getParent();
-			if(parent != null
-					&& parent.getMatched() != parentOfMatched){
-				node.getMatched().setChangeType(TreeNode.NODE_INSERTED);
-				addDeleted(node, opStack, delOps);
-			}
 		}
 		for(TreeNode child : node.children){
 			delOps.addAll(generateDelete(child, opStack));

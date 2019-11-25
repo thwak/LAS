@@ -25,49 +25,16 @@ public class Tree {
 		this.name = name;
 		this.root = root;
 		this.size = 0;
-		this.depthMap = new HashMap<Integer, List<TreeNode>>();
-		this.leaves = new ArrayList<TreeNode>();
+		this.depthMap = new HashMap<>();
+		this.leaves = new ArrayList<>();
 	}
 
 	public List<TreeNode> dfs(){
-		List<TreeNode> visitedNodes = new ArrayList<TreeNode>();
-		for(TreeNode child : root.children){
-			visitedNodes.addAll(dfs(child));
-		}
-		return visitedNodes;
+		return root.dfs(false);
 	}
 
 	public List<TreeNode> bfs(){
-		List<TreeNode> visitedNodes = new ArrayList<TreeNode>();
-		visitedNodes.addAll(root.children);
-		for(TreeNode child : root.children){
-			visitedNodes.addAll(bfs(child));
-		}
-		return visitedNodes;
-	}
-
-	public List<TreeNode> bfs(TreeNode node){
-		List<TreeNode> visitedNodes = new ArrayList<TreeNode>();
-		List<TreeNode> queue = new ArrayList<TreeNode>(node.children);
-		int size = queue.size();
-		while(queue.size() > 0){
-			visitedNodes.addAll(queue);
-			for(int i=0; i<size; i++){
-				TreeNode front = queue.remove(0);
-				queue.addAll(front.children);
-			}
-			size = queue.size();
-		}
-		return visitedNodes;
-	}
-
-	public List<TreeNode> dfs(TreeNode node){
-		List<TreeNode> visitedNodes = new ArrayList<TreeNode>();
-		visitedNodes.add(node);
-		for(TreeNode child : node.children){
-			visitedNodes.addAll(dfs(child));
-		}
-		return visitedNodes;
+		return root.bfs(false);
 	}
 
 	public void computeHashString(){
@@ -102,7 +69,7 @@ public class Tree {
 	}
 
 	public List<TreeNode> getUnmatchedLeaves(){
-		List<TreeNode> unmatched = new ArrayList<TreeNode>();
+		List<TreeNode> unmatched = new ArrayList<>();
 		for(TreeNode leaf : leaves){
 			if(!leaf.isMatched())
 				unmatched.add(leaf);
@@ -111,7 +78,7 @@ public class Tree {
 	}
 
 	public List<TreeNode> getAdjacentNodes(TreeNode node, int dist){
-		List<TreeNode> adjNodes = new ArrayList<TreeNode>();
+		List<TreeNode> adjNodes = new ArrayList<>();
 		List<TreeNode> nodes = node.getParent() != null ? node.getParent().children : depthMap.get(node.getDepth());
 		int index = nodes.indexOf(node);
 		//Add nodes near the given node which belong to the same parent.
@@ -125,10 +92,10 @@ public class Tree {
 	}
 
 	public List<TreeNode> getNearDepthNodes(List<TreeNode> nodes, int depth, int dist){
-		List<TreeNode> nearDepthNodes = new ArrayList<TreeNode>();
+		List<TreeNode> nearDepthNodes = new ArrayList<>();
 		//Add nodes above/below the given nodes.
-		List<TreeNode> adjParents = new ArrayList<TreeNode>();
-		List<TreeNode> adjChildren = new ArrayList<TreeNode>();
+		List<TreeNode> adjParents = new ArrayList<>();
+		List<TreeNode> adjChildren = new ArrayList<>();
 		for (int i = 0; i < depth; i++) {
 			adjChildren = getChildren(adjChildren);
 			nearDepthNodes.addAll(adjChildren);
@@ -139,8 +106,8 @@ public class Tree {
 	}
 
 	private List<TreeNode> getParents(List<TreeNode> nodes, int dist) {
-		List<TreeNode> adjParents = new ArrayList<TreeNode>();
-		TreeSet<TreeNode> parents = new TreeSet<TreeNode>(new Comparator<TreeNode>() {
+		List<TreeNode> adjParents = new ArrayList<>();
+		TreeSet<TreeNode> parents = new TreeSet<>(new Comparator<TreeNode>() {
 			@Override
 			public int compare(TreeNode o1, TreeNode o2) {
 				return Integer.compare(o1.getId(), o2.getId());
@@ -164,7 +131,7 @@ public class Tree {
 	}
 
 	private List<TreeNode> getChildren(List<TreeNode> nodes) {
-		List<TreeNode> adjChildren = new ArrayList<TreeNode>();
+		List<TreeNode> adjChildren = new ArrayList<>();
 		for(TreeNode node : nodes){
 			adjChildren.addAll(node.getUnmatchedChildren());
 		}

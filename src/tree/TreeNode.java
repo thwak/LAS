@@ -143,6 +143,10 @@ public class TreeNode implements Serializable {
 		this.matched = matched;
 	}
 
+	public void unmatch() {
+		this.matched = null;
+	}
+
 	public TreeNode getMatched(){
 		return matched;
 	}
@@ -262,5 +266,50 @@ public class TreeNode implements Serializable {
 			int index = indexInParent();
 			return index < this.parent.children.size() - 1 ? this.parent.children.get(index + 1) : null;
 		}
+	}
+
+	public List<TreeNode> dfs(boolean inclusive){
+		List<TreeNode> visitedNodes = new ArrayList<>();
+		if(inclusive)
+			visitedNodes.add(this);
+		for(TreeNode child : this.children){
+			visitedNodes.addAll(dfs(child));
+		}
+		return visitedNodes;
+	}
+
+	public List<TreeNode> bfs(boolean inclusive){
+		List<TreeNode> visitedNodes = new ArrayList<>();
+		if(inclusive)
+			visitedNodes.add(this);
+		visitedNodes.addAll(this.children);
+		for(TreeNode child : this.children){
+			visitedNodes.addAll(bfs(child));
+		}
+		return visitedNodes;
+	}
+
+	public List<TreeNode> bfs(TreeNode node){
+		List<TreeNode> visitedNodes = new ArrayList<>();
+		List<TreeNode> queue = new ArrayList<>(node.children);
+		int size = queue.size();
+		while(queue.size() > 0){
+			visitedNodes.addAll(queue);
+			for(int i=0; i<size; i++){
+				TreeNode front = queue.remove(0);
+				queue.addAll(front.children);
+			}
+			size = queue.size();
+		}
+		return visitedNodes;
+	}
+
+	public List<TreeNode> dfs(TreeNode node){
+		List<TreeNode> visitedNodes = new ArrayList<>();
+		visitedNodes.add(node);
+		for(TreeNode child : node.children){
+			visitedNodes.addAll(dfs(child));
+		}
+		return visitedNodes;
 	}
 }
