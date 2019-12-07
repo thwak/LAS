@@ -468,14 +468,7 @@ public class ScriptGenerator {
 			if(!node.isMatched() && !node.isLeaf()){
 				if(node.getType() == ASTNode.BLOCK){
 					if(node.getParent() != null && node.getParent().isMatched()){
-						for(TreeNode child : node.getParent().getMatched().children){
-							if(!child.isMatched() && child.getType() == ASTNode.BLOCK){
-								node.setMatched(child);
-								child.setMatched(node);
-								followupMatch += 2;
-								break;
-							}
-						}
+						checkBlockMatch(node);
 					}
 					continue;
 				}
@@ -487,18 +480,22 @@ public class ScriptGenerator {
 			if(!node.isMatched() && !node.isLeaf()){
 				if(node.getType() == ASTNode.BLOCK){
 					if(node.getParent() != null && node.getParent().isMatched()){
-						for(TreeNode child : node.getParent().getMatched().children){
-							if(!child.isMatched() && child.getType() == ASTNode.BLOCK){
-								node.setMatched(child);
-								child.setMatched(node);
-								followupMatch += 2;
-								break;
-							}
-						}
+						checkBlockMatch(node);
 					}
 					continue;
 				}
 				findFollowUpMatch(node);
+			}
+		}
+	}
+
+	private static void checkBlockMatch(TreeNode node) {
+		for(TreeNode child : node.getParent().getMatched().children){
+			if(!child.isMatched() && child.getType() == ASTNode.BLOCK){
+				node.setMatched(child);
+				child.setMatched(node);
+				followupMatch += 2;
+				break;
 			}
 		}
 	}
@@ -634,7 +631,15 @@ public class ScriptGenerator {
 					&& node.equals(match.getBestMatch())){
 				node.setMatched(match);
 				match.setMatched(node);
+				if(node.getType() == ASTNode.BLOCK
+						&& node.getParent().getType() == ASTNode.METHOD_DECLARATION) {
+					System.out.println(node.getParent());
+					if(match != null)
+						System.out.println(match.getParent());
+				}
 				similarMatch += 2;
+				//Match child blocks first.
+				matchBlocks(node, match);
 				similarMatch(node.children, match.children);
 			}
 		}
@@ -645,7 +650,14 @@ public class ScriptGenerator {
 					&& node.equals(match.getBestMatch())){
 				node.setMatched(match);
 				match.setMatched(node);
+				if(node.getType() == ASTNode.BLOCK
+						&& node.getParent().getType() == ASTNode.METHOD_DECLARATION) {
+					System.out.println(node.getParent());
+					if(match != null)
+						System.out.println(match.getParent());
+				}
 				similarMatch += 2;
+				matchBlocks(node, match);
 				similarMatch(node.children, match.children);
 			}
 		}
@@ -668,6 +680,21 @@ public class ScriptGenerator {
 			similarMatch(xChildren, yNodes);
 		}else if(yChildren.size() > 0 && xChildren.size() == 0){
 			similarMatch(yChildren, xNodes);
+		}
+	}
+
+	private static void matchBlocks(TreeNode n1, TreeNode n2) {
+		for(TreeNode c1 : n1.children) {
+			if(!c1.isMatched() && c1.getType() == ASTNode.BLOCK) {
+				for(TreeNode c2 : n2.children) {
+					if(!c2.isMatched() && c2.getType() == ASTNode.BLOCK
+							&& c1.similarity(c2) == 1.0d) {
+						c1.setMatched(c2);
+						c2.setMatched(c1);
+						followupMatch += 2;
+					}
+				}
+			}
 		}
 	}
 
