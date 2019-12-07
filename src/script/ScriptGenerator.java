@@ -631,12 +631,6 @@ public class ScriptGenerator {
 					&& node.equals(match.getBestMatch())){
 				node.setMatched(match);
 				match.setMatched(node);
-				if(node.getType() == ASTNode.BLOCK
-						&& node.getParent().getType() == ASTNode.METHOD_DECLARATION) {
-					System.out.println(node.getParent());
-					if(match != null)
-						System.out.println(match.getParent());
-				}
 				similarMatch += 2;
 				//Match child blocks first.
 				matchBlocks(node, match);
@@ -650,12 +644,6 @@ public class ScriptGenerator {
 					&& node.equals(match.getBestMatch())){
 				node.setMatched(match);
 				match.setMatched(node);
-				if(node.getType() == ASTNode.BLOCK
-						&& node.getParent().getType() == ASTNode.METHOD_DECLARATION) {
-					System.out.println(node.getParent());
-					if(match != null)
-						System.out.println(match.getParent());
-				}
 				similarMatch += 2;
 				matchBlocks(node, match);
 				similarMatch(node.children, match.children);
