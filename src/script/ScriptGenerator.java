@@ -122,30 +122,40 @@ public class ScriptGenerator {
 		for(EditOp op : pairs.keySet()) {
 			EditOp op2 = pairs.get(op);
 			script.removeEditOp(op);
+			Replace r = null;
 			if(op instanceof Delete) {
 				Delete del = (Delete)op;
 				deletes.remove(del);
 				script.removeEditOp(op2);
 				if(op2 instanceof Insert) {
-					Replace r = new Replace(del.getNode(), op2.getNode());
+					r = new Replace(del.getNode(), op2.getNode());
 					discardUpdates(del, updates, script);
-					script.addEditOp(r);
 				} else if(op2 instanceof Move) {
-					Replace r = new Replace(del.getNode(), op2.getNode().getMatched());
+					r = new Replace(del.getNode(), op2.getNode().getMatched());
 					discardUpdates(del, updates, script);
-					script.addEditOp(r);
 				}
 			} else if(op instanceof Insert) {
 				inserts.remove(op);
 				script.removeEditOp(op2);
 				if(op2 instanceof Move) {
-					Replace r = new Replace(op2.getNode(), op.getNode());
+					r = new Replace(op2.getNode(), op.getNode());
 					discardUpdates(op, updates, script);
-					script.addEditOp(r);
 				}
 			} else if(op instanceof Move) {
 				discardMove((Move)op, pairs, script);
 				discardUpdates(op, updates, script);
+			}
+
+			if(r != null) {
+				//Handle block replacement.
+				if(r.getNode().getType() == ASTNode.BLOCK && r.getLocation().getType() == ASTNode.BLOCK) {
+					TreeNode p1 = r.getNode().getParent();
+					TreeNode p2 = r.getLocation().getParent();
+					if(p1 != null && p2 != null && p1.getMatched() == p2) {
+						r = new Replace(p1, p2);
+					}
+				}
+				script.addEditOp(r);
 			}
 		}
 
