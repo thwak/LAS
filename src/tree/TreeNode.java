@@ -53,7 +53,16 @@ public class TreeNode implements Serializable {
 	}
 
 	public boolean match(TreeNode node) {
-		return this.getHash() == node.getHash();
+		if(node != null && this.getType() == node.getType()) {
+			//For Blocks, parent must be matched too.
+			if(this.getType() == ASTNode.BLOCK) {
+				boolean parentCheck = this.parent != null && node.getParent() != null &&
+						this.parent.isMatched() && this.parent.getMatched() == node.getParent();
+				return parentCheck && this.getHash() == node.getHash();
+			}
+			return this.getHash() == node.getHash();
+		}
+		return false;
 	}
 
 	public int getId() {
