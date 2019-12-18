@@ -2,6 +2,7 @@ package script.model;
 
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 
 import tree.TreeNode;
@@ -23,7 +24,7 @@ public class EditOp implements Serializable {
 		this.node = node;
 		this.location = location;
 		this.position = position;
-		this.children = new ArrayList<EditOp>();
+		this.children = new ArrayList<>();
 		this.size = 0;
 	}
 
@@ -86,5 +87,37 @@ public class EditOp implements Serializable {
 			editOps.addAll(child.getSubtreeEdit());
 		}
 		return editOps;
+	}
+
+	public Iterator<EditOp> childEdits() {
+		return children.iterator();
+	}
+
+	public boolean attach(EditOp op) {
+		TreeNode n = op.getNode();
+		boolean attached = false;
+		if(this.node == n.getParent()) {
+			for(int i=0; i<children.size(); i++) {
+				TreeNode curr = children.get(i).getNode();
+				if(n.getId() < curr.getId()) {
+					children.add(i, op);
+					attached = true;
+					break;
+				} else if(n.getId() == curr.getId()) {
+					attached = true;
+					break;
+				}
+			}
+			if(!attached)
+				children.add(op);
+			return true;
+		} else {
+			for(EditOp child : children) {
+				attached = attached || child.attach(op);
+				if(attached)
+					break;
+			}
+			return attached;
+		}
 	}
 }
