@@ -6,7 +6,7 @@ For the details of the approach, please check this [draft](https://github.com/th
 ## Simple Usage
 ```
 mvn package
-java -cp {jar file} main.LAS {old file path} {new file path}
+java -cp {jar file} main.TreeDiff {old file path} {new file path}
 ```
 
 ## Parameters
