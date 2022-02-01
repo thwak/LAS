@@ -9,7 +9,7 @@ import script.model.EditScript;
 import tree.Tree;
 import tree.TreeBuilder;
 
-public class TreeDiff {
+public class LAS {
 
 	public static void main(String[] args) {
 		File b2 = new File("/Users/Jindae/Documents/workspace/Toys/src/ABC.java");
