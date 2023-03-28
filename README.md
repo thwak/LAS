@@ -1,6 +1,8 @@
 # LAS
 Location Aware Source code differencing library.
 
+For the details of the approach, please check this [draft](https://github.com/thwak/LAS/wiki/las.pdf).
+
 ## Simple Usage
 ```
 mvn package
