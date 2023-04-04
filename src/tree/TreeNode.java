@@ -54,11 +54,12 @@ public class TreeNode implements Serializable {
 
 	public boolean match(TreeNode node) {
 		if(node != null && this.getType() == node.getType()) {
-			//For Blocks, parent must be matched too.
+			//For Blocks, parent must be matched too, unless it's not a block.
 			if(this.getType() == ASTNode.BLOCK) {
 				boolean parentCheck = this.parent != null && node.getParent() != null &&
 						this.parent.isMatched() && this.parent.getMatched() == node.getParent();
-				return parentCheck && this.getHash() == node.getHash();
+				boolean blockParent = this.parent != null && this.parent.getType() == ASTNode.BLOCK;
+				return (blockParent || parentCheck) && this.getHash() == node.getHash();
 			}
 			return this.getHash() == node.getHash();
 		}
@@ -226,6 +227,13 @@ public class TreeNode implements Serializable {
 
 	public boolean isDeleted(){
 		return changeType == NODE_DELETED;
+	}
+
+	public boolean isMoved() {
+		if(parent != null && matched != null) {
+			return matched.getParent() != null && matched.getParent().getMatched() != parent;
+		}
+		return false;
 	}
 
 	@Override
