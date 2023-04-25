@@ -27,7 +27,7 @@ public class ScriptGenerator {
 	private static final int DEPTH_THRESHOLD = System.getProperty("las.depth.threshold") == null ? 3 : Integer.parseInt(System.getProperty("las.depth.threshold"));
 	private static final double SIM_THRESHOLD = System.getProperty("las.sim.threshold") == null ? 0.65d : Double.parseDouble(System.getProperty("las.sim.threshold"));
 	private static final boolean ENABLE_EXACT_MATCH =  System.getProperty("las.enable.exact") == null ? true : Boolean.parseBoolean(System.getProperty("las.enable.exact"));
-	private static final boolean ENABLE_REPLACE =  System.getProperty("las.enable.replace") == null ? true : Boolean.parseBoolean(System.getProperty("las.enable.replace"));
+	private static final boolean ENABLE_REPLACE =  System.getProperty("las.enable.replace") == null ? false : Boolean.parseBoolean(System.getProperty("las.enable.replace"));
 	private static final boolean SPLIT_MOVES =  System.getProperty("las.split.moves") == null ? false : Boolean.parseBoolean(System.getProperty("las.split.moves"));
 
 	public static int exactMatch = 0;
