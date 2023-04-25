@@ -674,8 +674,8 @@ public class ScriptGenerator {
 						&& candidate.getType() == node.getType()) {
 					TreeNode nodeParent = node.getParent();
 					TreeNode candidateParent = candidate.getParent();
-					//If parents are also matched, it is the match.
-					if(nodeParent != null && !nodeParent.isMatched()
+					//If node and candidate's parents are also matched, it is the match.
+					if(nodeParent != null && nodeParent.isMatched()
 							&& nodeParent.getMatched() == candidateParent){
 						node.setMatched(candidate);
 						candidate.setMatched(node);
