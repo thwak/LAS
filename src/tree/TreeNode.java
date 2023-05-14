@@ -143,8 +143,8 @@ public class TreeNode implements Serializable {
 	}
 
 	public void setMatched(TreeNode matched){
-		if(this.matched != null){
-			System.err.println("Already matched to "+this.matched+", but tried to match again with "+matched);
+		if(this.matched != null && matched != this.matched){
+			System.err.println(this + " is already matched to "+this.matched+", but tried to match again with "+matched);
 			StackTraceElement[] trace = Thread.currentThread().getStackTrace();
 			for (StackTraceElement traceElement : trace)
 				System.err.println("\tat " + traceElement);

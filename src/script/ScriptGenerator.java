@@ -639,6 +639,7 @@ public class ScriptGenerator {
 		bfs = after.bfs();
 		for(TreeNode node : bfs){
 			if(!node.isMatched() && !node.isLeaf()){
+				//Blocks should be matched if their parents are matched.
 				if(node.getType() == ASTNode.BLOCK){
 					if(node.getParent() != null && node.getParent().isMatched()){
 						checkBlockMatch(node);
@@ -664,8 +665,9 @@ public class ScriptGenerator {
 	private static void findFollowUpMatch(TreeNode node) {
 		TreeNode match = null;
 		for(TreeNode child : node.children){
-			//If a child is an unmatched block, need to check it first.
-			if(!child.isMatched() && child.getType() == ASTNode.BLOCK){
+			//If a child is an unmatched block belongs to the non-block node, need to check it first.
+			if(node.getType() != ASTNode.BLOCK &&
+					!child.isMatched() && child.getType() == ASTNode.BLOCK){
 				findFollowUpMatch(child);
 			}
 			if(child.isMatched()){
@@ -685,6 +687,7 @@ public class ScriptGenerator {
 					if(match == null){
 						match = candidate;
 					}else if(match != candidate){
+						//Two children matched to different parents' children - inconclusive.
 						return;
 					}
 				}
